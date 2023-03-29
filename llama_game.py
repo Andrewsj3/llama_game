@@ -1,11 +1,12 @@
-"""Llama component: Initialise the llama and the ground.
-Llama can jump when space or up arrow is pressed
+"""Obstacles component: Create moving obstacles for the llama to jump over
 Jack Andrews
 29/3/23"""
 import pygame
+import random
 
 WIDTH = 620
 HEIGHT = 200
+FPS = 30
 
 
 class Game:
@@ -13,16 +14,61 @@ class Game:
     ground_img = pygame.image.load("assets/ground.png")
     ground_img = pygame.transform.smoothscale(ground_img, [WIDTH, 1])
     cactus_img = pygame.image.load("assets/cactus.png")
+    obstacles = []
+    # Keeping track of all cactuses on screen
+    speed = 10
+    # Controlling how much the cactuses move per frame
+    group_size = 0
+    # How many spawn at a time
 
     @classmethod
     def draw(cls):
         cls.win.fill(0xFFFFFF)
         cls.win.blit(cls.ground_img, [0, 132])
+        for obstacle in cls.obstacles:
+            cls.win.blit(obstacle[0], [obstacle[1], 100])
+
+    @classmethod
+    def create_obstacles(cls):
+        cls.group_size = random.randint(1, 3)
+        for i in range(cls.group_size):
+            cls.obstacles.append([cls.cactus_img, WIDTH + i * 20])
+            # Spacing each of the cacti apart so they don't spawn on top of
+            # each other
+
+    @classmethod
+    def update_obstacles(cls):
+        new_obstacles = []
+        for obstacle in cls.obstacles:
+            if obstacle[1] > -5:
+                # If the obstacle is not completely offscreen
+                new_obstacles.append(obstacle)
+        if len(cls.obstacles) == 0:
+            # Spawns new cacti if there are none
+            cls.create_obstacles()
+            return
+        for i in range(len(new_obstacles)):
+            new_obstacles[i][1] -= cls.speed
+            # Moving the obstacles left
+
+        cls.obstacles = new_obstacles
+
+    @classmethod
+    def check_collisions(cls, llama):
+        try:
+            min_x = min(cls.obstacles, key=lambda x: x[1])[1]-10
+            max_x = min_x + (len(cls.obstacles) * 20)+10
+            x_bounds = range(min_x, max_x)
+        except ValueError:
+            return False
+        if llama.x in x_bounds and llama.y > 65:
+            # TODO
+            pass
 
 
 class Llama:
-    Y_VELOCITY = JUMP_HEIGHT = 20
-    Y_GRAVITY = 3.333333333333333
+    Y_VELOCITY = JUMP_HEIGHT = 24
+    Y_GRAVITY = 4
     stand_img = pygame.image.load("assets/Llama.png")
     r_leg_img = pygame.image.load("assets/Llama3.png")
     l_leg_img = pygame.image.load("assets/Llama2.png")
@@ -51,7 +97,7 @@ class Llama:
     def jump(self):
         self.y -= self.vel
         self.vel -= self.Y_GRAVITY
-        if self.vel < - self.JUMP_HEIGHT:
+        if self.vel < -self.JUMP_HEIGHT:
             self.y += 100 - self.y
             # Sets llama's y position to the default 100
             self.is_jumping = False
@@ -83,11 +129,12 @@ def main():
             llama.jump()
             # This gets called on every frame until the llama touches the
             # ground
-
         Game.draw()
         llama.draw()
+        Game.check_collisions(llama)
+        Game.update_obstacles()
         pygame.display.update()
-        clock.tick(30)
+        clock.tick(FPS)
 
 
 if __name__ == "__main__":
