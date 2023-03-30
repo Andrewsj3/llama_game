@@ -1,8 +1,10 @@
-"""Obstacles component: Create moving obstacles for the llama to jump over
+"""Game over + highscore + multiplayer component: End game if llama hits
+cactus, save highscore, and include optional multiplayer
 Jack Andrews
 29/3/23"""
 import pygame
 import random
+from sys import argv
 
 WIDTH = 620
 HEIGHT = 200
@@ -10,27 +12,58 @@ FPS = 30
 
 
 class Game:
+    pygame.init()
     win = pygame.display.set_mode((WIDTH, HEIGHT))
     ground_img = pygame.image.load("assets/ground.png")
-    ground_img = pygame.transform.smoothscale(ground_img, [WIDTH, 1])
+    ground_img = pygame.transform.smoothscale(ground_img, [WIDTH, 3])
     cactus_img = pygame.image.load("assets/cactus.png")
+    font = pygame.font.Font("assets/PressStart.ttf", 12)
+    icon_img = pygame.image.load("assets/llama_icon.png")
+    clock = pygame.time.Clock()
+    pygame.display.set_icon(icon_img)
+    pygame.display.set_caption("Llama Game")
     obstacles = []
     # Keeping track of all cactuses on screen
     speed = 10
     # Controlling how much the cactuses move per frame
     group_size = 0
     # How many spawn at a time
+    max_group_size = 4
+    # The most that can spawn at a time
+    score = 0
+    high_score = 0
 
     @classmethod
-    def draw(cls):
+    def draw(cls, high_score):
         cls.win.fill(0xFFFFFF)
         cls.win.blit(cls.ground_img, [0, 132])
+        message(str(cls.score).rjust(5, "0"), (0, 0, 0,), [570, 20])
+        message(f"HI {str(high_score).rjust(5, '0')}", (0, 0, 0,), [480, 20])
+        # Drawing scores onto the screen
         for obstacle in cls.obstacles:
             cls.win.blit(obstacle[0], [obstacle[1], 100])
 
     @classmethod
+    def load_high_score(cls):
+        try:
+            with open("highscore.txt") as f:
+                high_score = int(f.read())
+                return high_score
+        except IOError:
+            # No highscore exists yet
+            return 0
+
+    @classmethod
+    def save_high_score(cls):
+        high_score = cls.load_high_score()
+        if cls.score > high_score:
+            with open("highscore.txt", 'w') as f:
+                f.write(str(cls.score))
+
+    @classmethod
     def create_obstacles(cls):
-        cls.group_size = random.randint(1, 3)
+        cls.group_size = random.randint(
+            cls.max_group_size - 3, cls.max_group_size)
         for i in range(cls.group_size):
             cls.obstacles.append([cls.cactus_img, WIDTH + i * 20])
             # Spacing each of the cacti apart so they don't spawn on top of
@@ -38,6 +71,10 @@ class Game:
 
     @classmethod
     def update_obstacles(cls):
+        if cls.score % 1000 == 0 and cls.score != 0:
+            cls.speed += 3
+            cls.max_group_size += 1
+            # Speeding the game up so it becomes more difficult over time
         new_obstacles = []
         for obstacle in cls.obstacles:
             if obstacle[1] > -5:
@@ -56,14 +93,15 @@ class Game:
     @classmethod
     def check_collisions(cls, llama):
         try:
-            min_x = min(cls.obstacles, key=lambda x: x[1])[1]-10
-            max_x = min_x + (len(cls.obstacles) * 20)+10
+            min_x = min(cls.obstacles, key=lambda x: x[1])[1] - 10
+            max_x = min_x + (len(cls.obstacles) * 20) + 10
+            # Finding the minimum and maximum x coordinates of each group
             x_bounds = range(min_x, max_x)
         except ValueError:
             return False
         if llama.x in x_bounds and llama.y > 65:
-            # TODO
-            pass
+            return True
+        return False
 
 
 class Llama:
@@ -73,9 +111,9 @@ class Llama:
     r_leg_img = pygame.image.load("assets/Llama3.png")
     l_leg_img = pygame.image.load("assets/Llama2.png")
 
-    def __init__(self):
+    def __init__(self, x):
         self.counter = 0
-        self.x = 50
+        self.x = x
         self.y = 100
         self.vel = self.Y_VELOCITY
         self.imgs = {0: self.stand_img, 1: self.r_leg_img, 2: self.l_leg_img}
@@ -106,15 +144,26 @@ class Llama:
         self.draw()
 
 
+def message(text, text_col, coords, bg_col=None):
+    txt = Game.font.render(text, True, text_col, bg_col)
+    text_box = txt.get_rect(center=coords)
+    Game.win.blit(txt, text_box)
+
+
 def main():
-    pygame.init()
-    icon_img = pygame.image.load("assets/llama_icon.png")
-    clock = pygame.time.Clock()
-    pygame.display.set_icon(icon_img)
-    pygame.display.set_caption("Llama Game")
-    llama = Llama()
+    llama = Llama(60)
+    if '-m' in argv[1:]:
+        llama2 = Llama(30)
+        # Allows the user to toggle multiplayer by passing the -m flag
+    else:
+        llama2 = Llama(-50)
+        # llama2 still needs to exist for the program to work,
+        # but we just place it offscreen
+    # Multiplayer suggested by Jess
+    high_score = Game.load_high_score()
 
     while True:
+        Game.score += Game.speed // 10
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 pygame.quit()
@@ -122,19 +171,50 @@ def main():
 
         key_pressed = pygame.key.get_pressed()
 
-        if key_pressed[pygame.K_SPACE] | key_pressed[pygame.K_UP]:
+        if key_pressed[pygame.K_SPACE]:
             llama.is_jumping = True
+        if key_pressed[pygame.K_UP]:
+            llama2.is_jumping = True
 
         if llama.is_jumping:
             llama.jump()
             # This gets called on every frame until the llama touches the
             # ground
-        Game.draw()
+        if llama2.is_jumping:
+            llama2.jump()
+        Game.draw(high_score)
         llama.draw()
-        Game.check_collisions(llama)
+        llama2.draw()
+        if any([Game.check_collisions(i) for i in [llama, llama2]]):
+            break
         Game.update_obstacles()
         pygame.display.update()
-        clock.tick(FPS)
+        Game.clock.tick(FPS)
+
+    while True:
+        message("You died! Press space to play again or Esc to quit",
+                (0, 0, 0), [WIDTH // 2, 80])
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                Game.save_high_score()
+                pygame.quit()
+                exit()
+            if event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_SPACE:
+                    Game.win.fill(0xFFFFFF)
+                    Game.speed = 10
+                    Game.save_high_score()
+                    Game.score = 0
+                    Game.max_group_size = 4
+                    Game.obstacles = []
+                    # Resetting attributes of Game to default
+                    main()
+                elif event.key == pygame.K_ESCAPE:
+                    Game.save_high_score()
+                    pygame.quit()
+                    exit()
+
+        pygame.display.update()
 
 
 if __name__ == "__main__":
