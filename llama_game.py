@@ -1,7 +1,6 @@
-"""Game over + highscore + multiplayer component: End game if llama hits
-cactus, save highscore, and include optional multiplayer
+"""Improved collision system and obstacle spawning
 Jack Andrews
-29/3/23"""
+2/4/23"""
 import pygame
 import random
 from sys import argv
@@ -75,46 +74,43 @@ class Game:
             cls.speed += 3
             cls.max_group_size += 1
             # Speeding the game up so it becomes more difficult over time
-        new_obstacles = []
-        for obstacle in cls.obstacles:
-            if obstacle[1] > -5:
-                # If the obstacle is not completely offscreen
-                new_obstacles.append(obstacle)
-        if len(cls.obstacles) == 0:
-            # Spawns new cacti if there are none
+        cls.obstacles = [ob for ob in cls.obstacles if ob[1] > -5]
+        if not len(cls.obstacles):
             cls.create_obstacles()
-            return
-        for i in range(len(new_obstacles)):
-            new_obstacles[i][1] -= cls.speed
+        elif len(cls.obstacles) == 1 and cls.obstacles[0][1] < WIDTH // 3:
+            cls.create_obstacles()
+        elif len(cls.obstacles) == 2 and cls.obstacles[0][1] < WIDTH // 3\
+                and cls.obstacles[1][1] < WIDTH // 2:
+            cls.create_obstacles()
+        for i in range(len(cls.obstacles)):
+            cls.obstacles[i][1] -= cls.speed
             # Moving the obstacles left
-
-        cls.obstacles = new_obstacles
 
     @classmethod
     def check_collisions(cls, llama):
-        try:
-            min_x = min(cls.obstacles, key=lambda x: x[1])[1] - 10
-            max_x = min_x + (len(cls.obstacles) * 20) + 10
-            # Finding the minimum and maximum x coordinates of each group
-            x_bounds = range(min_x, max_x)
-        except ValueError:
+        if llama.x < 0:
+            # Checking for the offscreen llama
             return False
-        if llama.x in x_bounds and llama.y > 65:
-            return True
+        for sprite in cls.obstacles:
+            cactus_rect = sprite[0].get_rect(topleft=(sprite[1], 100))
+            llama_rect = llama.stand_img.get_rect(topleft=(llama.x, llama.y))
+            # Now using get_rect for more accurate measurements
+            if pygame.Rect.colliderect(cactus_rect, llama_rect):
+                return True
         return False
 
 
 class Llama:
-    Y_VELOCITY = JUMP_HEIGHT = 24
-    Y_GRAVITY = 4
+    Y_VELOCITY = JUMP_HEIGHT = 16.8
+    Y_GRAVITY = 2.4
     stand_img = pygame.image.load("assets/Llama.png")
     r_leg_img = pygame.image.load("assets/Llama3.png")
     l_leg_img = pygame.image.load("assets/Llama2.png")
 
-    def __init__(self, x):
+    def __init__(self, x, y):
         self.counter = 0
         self.x = x
-        self.y = 100
+        self.y = y
         self.vel = self.Y_VELOCITY
         self.imgs = {0: self.stand_img, 1: self.r_leg_img, 2: self.l_leg_img}
         self.is_jumping = False
@@ -151,12 +147,12 @@ def message(text, text_col, coords, bg_col=None):
 
 
 def main():
-    llama = Llama(60)
+    llama = Llama(60, 100)
     if '-m' in argv[1:]:
-        llama2 = Llama(30)
+        llama2 = Llama(30, 100)
         # Allows the user to toggle multiplayer by passing the -m flag
     else:
-        llama2 = Llama(-50)
+        llama2 = Llama(-50, -50)
         # llama2 still needs to exist for the program to work,
         # but we just place it offscreen
     # Multiplayer suggested by Jess
